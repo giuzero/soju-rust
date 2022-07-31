@@ -324,26 +324,103 @@ async fn subscribe(_form: web::Form<FormData>) -> HttpResponse {
 ```
 ## DB
 Use sqlx with Postgres
-```docker
+
+> Im using WINDOWS10, postgres as docker and pgadmin as docker. I wasted plenty of time trying to make it work.
+
+```bash
 docker pull postgres
+docker run -e POSTGRES_USER=user -e POSTGRES_PASSWORD=password -e POSTGRES_DB=sojudb -p 5432:5432 -d postgres -N 1000
+
+
+#In windows powershell
+$env:DATABASE_URL = 'postgres://user:password@localhost:5432/sojudb'
+# as if it was export DATABASE_URL=postgres://user:password@localhost:5432/sojudb
+
+#this is just sqlx-cli
+cargo install --version=0.5.7 sqlx-cli --no-default-features --features postgres
+sqlx create database
+sqlx migrate add create_subscriptions_table
+  ```
+Now a new folder is created with an empty migration sql script. We have to insert our DDL:
+```sql
+-- migrations/{timestamp}_create_subscriptions_table.sql
+-- Create Subscriptions Table
+CREATE TABLE subscriptions(
+   id uuid NOT NULL,
+   PRIMARY KEY (id),
+   email TEXT NOT NULL UNIQUE,
+   name TEXT NOT NULL,
+   subscribed_at timestamptz NOT NULL
+);
+```
+Then run the migration:
+```
+sqlx migrate run
+```
+Let's check with pga:
+
+> :warning: Do not use user@domain.local as default email, I lost a lot of time trying to access pga, do not know why... #FML
+```
 docker pull dpage/pgadmin4:latest
 
-
-docker run --name postgresql -e POSTGRES_USER=myusername -e POSTGRES_PASSWORD=mypassword -p 5432:5432 -v /data:/var/lib/postgresql/data -d postgres
-
-docker run --name my-pgadmin -p 82:80 -e 'PGADMIN_DEFAULT_EMAIL=user@domain.local' -e 'PGADMIN_DEFAULT_PASSWORD=postgresmaster'-d dpage/pgadmin4
+docker run --name my-pgadmin -p 5050:80 -e 'PGADMIN_DEFAULT_EMAIL=user@gmail.com' -e 'PGADMIN_DEFAULT_PASSWORD=root'-d dpage/pgadmin4
 ```
-to simplify...
+You can find pga in your browser `http://localhost:5050`.
+
+
+
+> :warning: You need to use host.docker.internal instead of localhost as db host when you set your local db connection. ...#FML -.-''''
+
+You'll find your table in : `Servers>localhost>Databases>Schemas>public>Tables>subscriptions`
+
+Install sqlx, adding in `Cargo.toml`:
+```toml
+[dependencies]
+# [...]
+
+# Using table-like toml syntax to avoid a super-long line!
+[dependencies.sqlx]
+version = "0.5.7"
+default-features = false
+features = [
+    "runtime-actix-rustls", # tells sqlx to use the actix runtime for its futures and rustls as TLS backend
+    "macros", # to enable sqlx::query! and sqlx::query_as!
+    "postgres", # to use some postgres specific features
+    "uuid", # uuid support
+    "chrono", # date support
+    "migrate"
+]
 ```
-docker run \
-  -e POSTGRES_USER=user \
-  -e POSTGRES_PASSWORD=password \
-  -e POSTGRES_DB=sojudb \
-  -p 5432:5432 \
-  -d postgres \
-  postgres -N 1000
-  ```
+And now, clean up.
+Achieve di scaffolding and file modifications:
+```
+src/
+  configuration.rs
+  lib.rs
+  main.rs
+  routes/
+    mod.rs
+    health_check.rs
+    subscriptions.rs
+  startup.rs
+```
+```rust
+//! src/lib.rs
+pub mod configuration;
+pub mod routes;
+pub mod startup; //run function
+```
 
+`subscribe` and `FormData` are re-exported in routes/mod.rs:
 
+```rust
+//! src/routes/mod.rs
+mod health_check;
+mod subscriptions;
 
+pub use health_check::*;
+pub use subscriptions::*;
+```
 
+Some refactory is needed with some visibility pub. 
+Result as branch "checkpoint 1"
