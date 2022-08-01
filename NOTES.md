@@ -423,4 +423,94 @@ pub use subscriptions::*;
 ```
 
 Some refactory is needed with some visibility pub. 
-Result as branch "checkpoint 1"
+Result is branch "checkpoint 1"
+
+### DB connection configuration
+```rust
+//! src/configuration.rs
+#[derive(serde::Deserialize)]
+pub struct Settings {
+    pub database: DatabaseSettings,
+    pub application_port: u16
+}
+
+#[derive(serde::Deserialize)]
+pub struct DatabaseSettings {
+    pub username: String,
+    pub password: String,
+    pub port: u16,
+    pub host: String,
+    pub database_name: String,
+}
+
+pub fn get_configuration() -> Result<Settings, config::ConfigError> {
+    // reader init
+    let mut settings = config::Config::default();
+
+    // `config` would parse a file called "configuration.yaml"
+    settings.merge(config::File::with_name("configuration"))?;
+
+    // Try to convert 
+    settings.try_into()
+}
+
+impl DatabaseSettings {
+    pub fn connection_string(&self) -> String {
+        format!(
+            "postgres://{}:{}@{}:{}/{}",
+            self.username, self.password, self.host, self.port, self.database_name
+        )
+    }
+}
+```
+and in Cargo.toml
+```toml
+[dependencies]
+config = "0.11"
+```
+Adapt `main.rs`:
+```rust
+[...]
+use sojurust::configuration::get_configuration;
+[...]
+    let configuration = get_configuration().expect("Failed to read configuration.");
+    let address = format!("127.0.0.1:{}", configuration.application_port);
+[...]
+```
+Create `configuration.yaml` in root project's folder:
+```yaml
+application_port: 8000
+database:
+  host: "127.0.0.1"
+  port: 5432
+  username: "user"
+  password: "password"
+  database_name: "sojudb"
+```
+
+Add config read and db connect to tests:
+```rust
+[...]
+use sqlx::{PgConnection, Connection};
+use sojurust::configuration::get_configuration;
+[...]
+ // Arrange
+    let app_address = spawn_app();
+    let configuration = get_configuration().expect("Failed to read configuration");
+    let connection_string = configuration.database.connection_string();
+    // The `Connection` trait MUST be in scope for us to invoke
+    // `PgConnection::connect` - it is not an inherent method of the struct!
+    let connection = PgConnection::connect(&connection_string)
+        .await
+        .expect("Failed to connect to Postgres.");
+    let client = reqwest::Client::new();
+    // Act
+[...]
+```
+Create a `.env` for sqlx to work at compile time:
+```
+DATABASE_URL="postgres://user:password@localhost:5432/sojudb"
+```
+`cargo test` should just have problems finding the row.
+
+## Persistence
