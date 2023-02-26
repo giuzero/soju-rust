@@ -514,3 +514,5 @@ DATABASE_URL="postgres://user:password@localhost:5432/sojudb"
 `cargo test` should just have problems finding the row.
 
 ## Persistence
+
+Set PostgreSQL
