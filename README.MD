@@ -1,5 +1,5 @@
 # Notes
-## Upload a project that has alredy begun
+## Upload a project that has already begun
 
 ```bash
 git remote add origin https://github.com/giuzero/soju-rust.git
